@@ -13,80 +13,27 @@ weight = 2
 
 There are three major areas to consider when reviewing Docker security:
 
- - the intrinsic security of the kernel and its support for
-   namespaces and cgroups;
- - the attack surface of the Docker daemon itself;
- - loopholes in the container configuration profile, either by default,
-   or when customized by users.
- - the "hardening" security features of the kernel and how they
-   interact with containers.
+ - **Host Security** -- the attack surface of the underlying host and the
+  Docker daemon itself;
+ - **Container Security** -- and how it interacts with namespaces, cgroups,
+    and "hardening" features of the kernel
+ - **Configuring Containers for Least Privilege**
 
-## Kernel namespaces
+## Host Security
+The overall purpose and design of Docker Security is to protect against
+**external attack vectors**, with a focus on keeping containers isolated and
+operating with least privilege.  First, it is essential that you control access
+to the host and keep it securely configured.  Secondly, the Docker daemon
+currently requires `root` privileges, and you should therefore be aware of
+some important details:
 
-Docker containers are very similar to LXC containers, and they have
-similar security features. When you start a container with
-`docker run`, behind the scenes Docker creates a set of namespaces and control
-groups for the container.
+###Docker Daemon Security Details
 
-**Namespaces provide the first and most straightforward form of
-isolation**: processes running within a container cannot see, and even
-less affect, processes running in another container, or in the host
-system.
-
-**Each container also gets its own network stack**, meaning that a
-container doesn't get privileged access to the sockets or interfaces
-of another container. Of course, if the host system is setup
-accordingly, containers can interact with each other through their
-respective network interfaces — just like they can interact with
-external hosts. When you specify public ports for your containers or use
-[*links*](../userguide/dockerlinks.md)
-then IP traffic is allowed between containers. They can ping each other,
-send/receive UDP packets, and establish TCP connections, but that can be
-restricted if necessary. From a network architecture point of view, all
-containers on a given Docker host are sitting on bridge interfaces. This
-means that they are just like physical machines connected through a
-common Ethernet switch; no more, no less.
-
-How mature is the code providing kernel namespaces and private
-networking? Kernel namespaces were introduced [between kernel version
-2.6.15 and
-2.6.26](http://lxc.sourceforge.net/index.php/about/kernel-namespaces/).
-This means that since July 2008 (date of the 2.6.26 release, now 7 years
-ago), namespace code has been exercised and scrutinized on a large
-number of production systems. And there is more: the design and
-inspiration for the namespaces code are even older. Namespaces are
-actually an effort to reimplement the features of [OpenVZ](
-http://en.wikipedia.org/wiki/OpenVZ) in such a way that they could be
-merged within the mainstream kernel. And OpenVZ was initially released
-in 2005, so both the design and the implementation are pretty mature.
-
-## Control groups
-
-Control Groups are another key component of Linux Containers. They
-implement resource accounting and limiting. They provide many
-useful metrics, but they also help ensure that each container gets
-its fair share of memory, CPU, disk I/O; and, more importantly, that a
-single container cannot bring the system down by exhausting one of those
-resources.
-
-So while they do not play a role in preventing one container from
-accessing or affecting the data and processes of another container, they
-are essential to fend off some denial-of-service attacks. They are
-particularly important on multi-tenant platforms, like public and
-private PaaS, to guarantee a consistent uptime (and performance) even
-when some applications start to misbehave.
-
-Control Groups have been around for a while as well: the code was
-started in 2006, and initially merged in kernel 2.6.24.
-
-## Docker daemon attack surface
-
+**Only trusted users should be allowed to control your Docker daemon**.
 Running containers (and applications) with Docker implies running the
-Docker daemon. This daemon currently requires `root` privileges, and you
-should therefore be aware of some important details.
+Docker daemon.
 
-First of all, **only trusted users should be allowed to control your
-Docker daemon**. This is a direct consequence of some powerful Docker
+This is a direct consequence of some powerful Docker
 features. Specifically, Docker allows you to share a directory between
 the Docker host and a guest container; and it allows you to do so
 without limiting the access rights of the container. This means that you
@@ -129,7 +76,7 @@ privilege separation.
 
 Eventually, it is expected that the Docker daemon will run restricted
 privileges, delegating operations well-audited sub-processes,
-each with its own (very limited) scope of Linux capabilities, 
+each with its own (very limited) scope of Linux capabilities,
 virtual network setup, filesystem management, etc. That is, most likely,
 pieces of the Docker engine itself will run inside of containers.
 
@@ -139,7 +86,69 @@ containers controlled by Docker. Of course, it is fine to keep your
 favorite admin tools (probably at least an SSH server), as well as
 existing monitoring/supervision processes (e.g., NRPE, collectd, etc).
 
-## Linux kernel capabilities
+
+## Container Security
+
+Docker containers are very similar to LXC containers, and they have
+similar security features. When you start a container with
+`docker run`, behind the scenes Docker creates a set of namespaces and control
+groups for the container.
+
+### Kernel namespaces
+
+**Namespaces provide the first and most straightforward form of
+isolation**: processes running within a container cannot see, and even
+less affect, processes running in another container, or in the host
+system.
+
+**Each container also gets its own network stack**, meaning that a
+container doesn't get privileged access to the sockets or interfaces
+of another container. Of course, if the host system is setup
+accordingly, containers can interact with each other through their
+respective network interfaces — just like they can interact with
+external hosts. When you specify public ports for your containers or use
+[*links*](../userguide/dockerlinks.md)
+then IP traffic is allowed between containers. They can ping each other,
+send/receive UDP packets, and establish TCP connections, but that can be
+restricted if necessary. From a network architecture point of view, all
+containers on a given Docker host are sitting on bridge interfaces. This
+means that they are just like physical machines connected through a
+common Ethernet switch; no more, no less.
+
+How mature is the code providing kernel namespaces and private
+networking? Kernel namespaces were introduced [between kernel version
+2.6.15 and
+2.6.26](http://lxc.sourceforge.net/index.php/about/kernel-namespaces/).
+This means that since July 2008 (date of the 2.6.26 release, now 7 years
+ago), namespace code has been exercised and scrutinized on a large
+number of production systems. And there is more: the design and
+inspiration for the namespaces code are even older. Namespaces are
+actually an effort to reimplement the features of [OpenVZ](
+http://en.wikipedia.org/wiki/OpenVZ) in such a way that they could be
+merged within the mainstream kernel. And OpenVZ was initially released
+in 2005, so both the design and the implementation are pretty mature.
+
+### Control groups
+
+Control Groups are another key component of Linux Containers. They
+implement resource accounting and limiting. They provide many
+useful metrics, but they also help ensure that each container gets
+its fair share of memory, CPU, disk I/O; and, more importantly, that a
+single container cannot bring the system down by exhausting one of those
+resources.
+
+So while they do not play a role in preventing one container from
+accessing or affecting the data and processes of another container, they
+are essential to fend off some denial-of-service attacks. They are
+particularly important on multi-tenant platforms, like public and
+private PaaS, to guarantee a consistent uptime (and performance) even
+when some applications start to misbehave.
+
+Control Groups have been around for a while as well: the code was
+started in 2006, and initially merged in kernel 2.6.24.
+
+
+### Linux kernel capabilities
 
 By default, Docker starts containers with a restricted set of
 capabilities. What does that mean?
@@ -177,7 +186,8 @@ infrastructure around the container:
    is specifically engineered to behave like a router or firewall, of
    course).
 
-This means that in most cases, containers will not need "real" root
+## Configuring Containers for Least Privilege
+In most cases, containers will not need "real" root
 privileges *at all*. And therefore, containers can run with a reduced
 capability set; meaning that "root" within a container has much less
 privileges than the real "root". For instance, it is possible to:
@@ -213,7 +223,7 @@ capability removal, or less secure through the addition of capabilities.
 The best practice for users would be to remove all capabilities except
 those explicitly required for their processes.
 
-## Other kernel security features
+### Other kernel security features
 
 Capabilities are just one of the many security features provided by
 modern Linux kernels. It is also possible to leverage existing,
